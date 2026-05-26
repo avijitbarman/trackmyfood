@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MAA FOOD DELIVERY CORNER</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
+<style>
+*{
+  margin:0;
+  padding:0;
+  box-sizing:border-box;
+}
+
+body{
+  font-family: 'Segoe UI', sans-serif;
+  min-height:100vh;
+  background: linear-gradient(-45deg,#ff512f,#dd2476,#1fa2ff,#12d8fa);
+  background-size:400% 400%;
+  animation:bgmove 12s ease infinite;
+  color:white;
+}
+
+@keyframes bgmove{
+  0%{background-position:0% 50%;}
+  50%{background-position:100% 50%;}
+  100%{background-position:0% 50%;}
+}
+
+.header{
+  text-align:center;
+  padding:20px;
+}
+
+.logo{
+  font-size:42px;
+  font-weight:bold;
+  text-shadow:0 0 20px rgba(0,0,0,.5);
+}
+
+.subtitle{
+  font-size:22px;
+  color:#fff5b7;
+  margin-top:8px;
+}
+
+.clock{
+  margin-top:10px;
+  font-size:18px;
+  font-weight:bold;
+}
+
+.cards{
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+  gap:20px;
+  padding:20px;
+}
+
+.card{
+  width:220px;
+  padding:20px;
+  border-radius:25px;
+  backdrop-filter: blur(15px);
+  background: rgba(255,255,255,0.18);
+  border:1px solid rgba(255,255,255,.3);
+  box-shadow:0 8px 32px rgba(0,0,0,.25);
+  text-align:center;
+  transition:0.3s;
+}
+
+.card:hover{
+  transform:scale(1.05);
+}
+
+.label{
+  font-size:16px;
+  opacity:.8;
+}
+
+.value{
+  margin-top:10px;
+  font-size:26px;
+  font-weight:bold;
+}
+
+#map{
+  width:95%;
+  height:60vh;
+  margin:20px auto;
+  border-radius:25px;
+  overflow:hidden;
+  box-shadow:0 0 30px rgba(0,0,0,.4);
+}
+
+.footer{
+  text-align:center;
+  padding:15px;
+  font-size:14px;
+  opacity:.8;
+}
+</style>
+</head>
+
+<body>
+
+<div class="header">
+  <div class="logo">🍔 MAA FOOD DELIVERY CORNER</div>
+  <div class="subtitle">📍 Where is my food?</div>
+  <div class="clock" id="clock"></div>
+</div>
+
+<div class="cards">
+
+  <div class="card">
+    <div class="label">Distance</div>
+    <div class="value" id="distance">-- km</div>
+  </div>
+
+  <div class="card">
+    <div class="label">Expected Time</div>
+    <div class="value" id="eta">-- min</div>
+  </div>
+
+  <div class="card">
+    <div class="label">Current Location</div>
+    <div class="value" id="locationName">Loading...</div>
+  </div>
+
+</div>
+
+<div id="map"></div>
+
+<div class="footer">
+Made with ❤️ by Avijit
+</div>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<script type="module">
+
+import { initializeApp }
+from "https://www.gstatic.com/firebasejs/11.9.1/firebase-app.js";
+
+import { getDatabase, ref, onValue }
+from "https://www.gstatic.com/firebasejs/11.9.1/firebase-database.js";
+
+const firebaseConfig={
+ apiKey:"AIzaSyCHYT7noIjZLdNFXm_S7pvLu1yAsTUM-lQ",
+ authDomain:"track-my-delivery-331ba.firebaseapp.com",
+ databaseURL:"https://track-my-delivery-331ba-default-rtdb.asia-southeast1.firebasedatabase.app",
+ projectId:"track-my-delivery-331ba"
+};
+
+const app=initializeApp(firebaseConfig);
+const db=getDatabase(app);
+
+let map=L.map('map').setView([22.57,88.36],15);
+
+L.tileLayer(
+'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png'
+).addTo(map);
+
+
+// icons
+const bikeIcon=L.icon({
+ iconUrl:'https://cdn-icons-png.flaticon.com/512/2972/2972185.png',
+ iconSize:[45,45]
+});
+
+const userIcon=L.icon({
+ iconUrl:'https://cdn-icons-png.flaticon.com/512/149/149071.png',
+ iconSize:[35,35]
+});
+
+let bikeMarker=L.marker([22.57,88.36],{
+ icon:bikeIcon
+}).addTo(map);
+
+let myMarker=null;
+
+let bikeLat=22.57;
+let bikeLng=88.36;
+let myLat=0;
+let myLng=0;
+
+//let routePoints=[[22.57,88.36]];
+//let bikeLine=L.polyline(routePoints,{
+// color:'yellow',
+// weight:5
+//}).addTo(map);
+
+let connectLine=null;
+
+
+// live clock
+setInterval(()=>{
+ document.getElementById("clock").innerHTML=
+ new Date().toLocaleTimeString();
+},1000);
+
+
+// your location
+navigator.geolocation.watchPosition((pos)=>{
+ myLat=pos.coords.latitude;
+ myLng=pos.coords.longitude;
+
+ if(!myMarker){
+   myMarker=L.marker([myLat,myLng],{
+    icon:userIcon
+   }).addTo(map);
+ }else{
+   myMarker.setLatLng([myLat,myLng]);
+ }
+
+ updateInfo();
+});
+
+
+// bike firebase
+const locationRef=ref(db,'device1');
+
+onValue(locationRef,(snapshot)=>{
+ let data=snapshot.val();
+
+ if(data){
+   bikeLat=data.lat;
+   bikeLng=data.lng;
+
+   bikeMarker.setLatLng([bikeLat,bikeLng]);
+
+   routePoints.push([bikeLat,bikeLng]);
+   bikeLine.setLatLngs(routePoints);
+
+   updateInfo();
+   getLocationName();
+ }
+});
+
+
+// distance + ETA
+function updateInfo(){
+
+ if(myLat===0) return;
+
+ let dist=map.distance(
+ [myLat,myLng],
+ [bikeLat,bikeLng]
+ )/1000;
+
+ document.getElementById("distance").innerHTML=
+ dist.toFixed(2)+" km";
+
+ document.getElementById("eta").innerHTML=
+ (dist/30*60).toFixed(1)+" min";
+
+ if(connectLine){
+  map.removeLayer(connectLine);
+ }
+
+ connectLine=L.polyline(
+ [[myLat,myLng],[bikeLat,bikeLng]],
+ {
+  color:'cyan',
+  dashArray:'10,10'
+ }).addTo(map);
+
+ map.panTo([bikeLat,bikeLng],{
+  animate:true
+ });
+}
+
+
+// reverse geocode
+async function getLocationName(){
+ let url =
+ `https://nominatim.openstreetmap.org/reverse?format=json&zoom=18&addressdetails=1&lat=${bikeLat}&lon=${bikeLng}`;
+
+ let res = await fetch(url);
+ let data = await res.json();
+
+ let addr = data.address;
+
+ let place =
+   addr.suburb ||
+   addr.neighbourhood ||
+   addr.hamlet ||
+   addr.village ||
+   addr.road ||
+   addr.residential ||
+   addr.city ||
+   "Unknown";
+
+ document.getElementById("locationName").innerHTML = place;
+
+ bikeMarker.bindPopup(data.display_name);
+}
+
+</script>
+</body>
+</html>
